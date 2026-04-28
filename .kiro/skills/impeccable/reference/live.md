@@ -74,7 +74,7 @@ Reading annotations precisely:
 ### 2. Wrap the element
 
 ```bash
-node .kiro/skills/impeccable/scripts/live-wrap.mjs --id EVENT_ID --count EVENT_COUNT --element-id "ELEMENT_ID" --classes "class1,class2" --tag "div"
+node .kiro/skills/impeccable/scripts/live-wrap.mjs --id EVENT_ID --count EVENT_COUNT --element-id "ELEMENT_ID" --classes "class1,class2" --tag "div" --text "TEXT_SNIPPET"
 ```
 
 Flag mapping — keep them separate, don't collapse into `--query`:
@@ -82,8 +82,11 @@ Flag mapping — keep them separate, don't collapse into `--query`:
 - `--element-id` ← `event.element.id`
 - `--classes` ← `event.element.classes` joined with commas
 - `--tag` ← `event.element.tagName`
+- `--text` ← first ~80 chars of `event.element.textContent` (trim, single-line). **Pass this every call.** When the picked element shares classes + tag with sibling components (a list of `<Card>`s, repeating sections), this is what disambiguates which branch in source to wrap. Without it, wrap silently lands on the first match and may rewrite the wrong element.
 
 The helper searches ID first, then classes, then tag + class combo. If `event.pageUrl` implies the file (e.g. `/` is usually `index.html`), pass `--file PATH` to skip the search. `--query` is a fallback for raw text search only — do not use it for normal element lookups.
+
+If `--text` matches multiple candidates equally well, wrap exits with `{ error: "element_ambiguous", candidates: [...] }` and `fallback: "agent-driven"` — read the candidate line ranges, decide which one matches the picked element from page context, and write the wrapper manually per the fallback flow.
 
 Output on success: `{ file, insertLine, commentSyntax }`.
 
@@ -180,6 +183,23 @@ Write CSS + all variants in ONE edit at the `insertLine` reported by `wrap`. Col
 The first variant has no `display: none` (visible by default). All others do. If variants use only inline styles and no scoped CSS, omit the `<style>` tag entirely. Use `@scope` for CSS isolation (Chrome 118+ / Firefox 128+ / Safari 17.4+).
 
 One edit, all variants — the browser's MutationObserver picks everything up in one pass.
+
+**JSX / TSX target files.** Wrap `<style>` content in a template literal so the CSS `{` / `}` aren't parsed as JSX expressions, and use `className=` / `style={{…}}` on every variant element. Keep `data-impeccable-*` attributes as-is — they're plain strings:
+
+```tsx
+<style data-impeccable-css="SESSION_ID">{`
+  @scope ([data-impeccable-variant="1"]) { ... }
+  @scope ([data-impeccable-variant="2"]) { ... }
+`}</style>
+<div data-impeccable-variant="1">
+  {/* variant 1 */}
+</div>
+<div data-impeccable-variant="2" style={{ display: 'none' }}>
+  {/* variant 2 */}
+</div>
+```
+
+The wrap script already gives you a single-rooted JSX wrapper — a `<div data-impeccable-variants="…">` outer element with the marker comments tucked inside. Drop the variants block above into the "Variants: insert below this line" comment and the source stays valid TSX.
 
 ### 7. Parameters (composition-sized, 0–4 per variant)
 

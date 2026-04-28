@@ -323,12 +323,17 @@ export async function runAgentLoop({
         // sessions: the agent must derive the selector from the picked
         // element on the fly).
         const target = typeof wrapTarget === 'function' ? wrapTarget(event) : wrapTarget;
+        // Pull textContent from the picker event so wrap can disambiguate
+        // when sibling elements share classes/tag (issue #114). Fixtures can
+        // still override by including `text` in their wrapTarget.
+        const text = target.text ?? (event.element?.textContent || '').trim();
         const wrapInfo = await runWrap({
           tmp,
           scriptsDir,
           id: event.id,
           count: event.count,
           ...target,
+          text,
         });
         log(`wrapped: ${wrapInfo.file} insertLine=${wrapInfo.insertLine}`);
 
@@ -426,11 +431,12 @@ export async function runAgentLoop({
   }
 }
 
-async function runWrap({ tmp, scriptsDir, id, count, classes, tag, elementId }) {
+async function runWrap({ tmp, scriptsDir, id, count, classes, tag, elementId, text }) {
   const args = [path.join(scriptsDir, 'live-wrap.mjs'), '--id', id, '--count', String(count)];
   if (elementId) args.push('--element-id', elementId);
   if (classes) args.push('--classes', classes);
   if (tag) args.push('--tag', tag);
+  if (text) args.push('--text', text);
   const { stdout } = await execFileP(process.execPath, args, { cwd: tmp });
   const last = stdout.trim().split('\n').filter(Boolean).pop();
   return JSON.parse(last);

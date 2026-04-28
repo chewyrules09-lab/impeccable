@@ -441,6 +441,163 @@ describe('live-wrap — JSX / TSX correctness', () => {
     assert.ok(!inside.includes('extra-class'), 'decoy not wrapped');
   });
 
+  it('keeps the JSX wrapper single-rooted by tucking marker comments INSIDE the outer <div>', () => {
+    // Replacing one JSX element with [comment, <div>, comment] yields three
+    // adjacent siblings, which Vite's oxc rejects with "Adjacent JSX
+    // elements must be wrapped in an enclosing tag." A Fragment `<></>`
+    // would solve adjacency but breaks `cloneElement`-using parents (Radix
+    // `asChild` etc.) with "Invalid prop supplied to React.Fragment". The
+    // wrap script's answer is to tuck the markers INSIDE the outer wrapper
+    // <div>, which IS the single JSX-slot child.
+    const tsx = `export default function App() {
+  return (
+    <main>
+      <section className="frag-target">
+        <h1>Hi</h1>
+      </section>
+    </main>
+  );
+}`;
+    writeFileSync(join(tmp, 'App.tsx'), tsx);
+
+    execSync(
+      `node source/skills/impeccable/scripts/live-wrap.mjs --id frag1 --count 3 --classes "frag-target" --tag "section" --file "${join(tmp, 'App.tsx')}"`,
+      { cwd: process.cwd(), encoding: 'utf-8' }
+    );
+
+    const modified = readFileSync(join(tmp, 'App.tsx'), 'utf-8');
+    // No JSX Fragment wrappers (those break asChild/cloneElement parents).
+    assert.ok(!modified.includes('<>'),  'no Fragment opener emitted');
+    assert.ok(!modified.includes('</>'), 'no Fragment closer emitted');
+
+    // The outer wrapper <div data-impeccable-variants="..."> appears BEFORE
+    // both marker comments — markers are tucked inside.
+    const wrapperIdx = modified.indexOf('data-impeccable-variants="frag1"');
+    const startMarkerIdx = modified.indexOf('impeccable-variants-start frag1');
+    const endMarkerIdx = modified.indexOf('impeccable-variants-end frag1');
+    assert.ok(wrapperIdx !== -1 && startMarkerIdx !== -1 && endMarkerIdx !== -1, 'all markers present');
+    assert.ok(wrapperIdx < startMarkerIdx, 'wrapper opens before start-marker comment');
+    assert.ok(endMarkerIdx > startMarkerIdx, 'end marker follows start marker');
+  });
+
+  it('HTML wrapper keeps marker comments OUTSIDE the wrapper <div> (existing layout)', () => {
+    const html = '<main>\n  <section class="html-frag">Hi</section>\n</main>';
+    writeFileSync(join(tmp, 'page.html'), html);
+
+    execSync(
+      `node source/skills/impeccable/scripts/live-wrap.mjs --id htmlFrag --count 3 --classes "html-frag" --tag "section" --file "${join(tmp, 'page.html')}"`,
+      { cwd: process.cwd(), encoding: 'utf-8' }
+    );
+
+    const modified = readFileSync(join(tmp, 'page.html'), 'utf-8');
+    const wrapperIdx = modified.indexOf('data-impeccable-variants="htmlFrag"');
+    const startMarkerIdx = modified.indexOf('impeccable-variants-start htmlFrag');
+    assert.ok(startMarkerIdx < wrapperIdx, 'HTML start marker precedes wrapper div');
+  });
+
+  it('disambiguates repeated JSX siblings via --text and lands on the correct branch', () => {
+    // Three <aside className="card"> elements with identical classes/tag —
+    // the user picked the SECOND one. Without --text, first-match wraps the
+    // first. With --text matching the picked element's textContent, wrap
+    // narrows to the right branch.
+    const tsx = `export default function Page() {
+  return (
+    <main>
+      <aside className="card">
+        <h2>Alpha card</h2>
+        <p>First in the list.</p>
+      </aside>
+      <aside className="card">
+        <h2>Beta card</h2>
+        <p>Second in the list.</p>
+      </aside>
+      <aside className="card">
+        <h2>Gamma card</h2>
+        <p>Third in the list.</p>
+      </aside>
+    </main>
+  );
+}`;
+    writeFileSync(join(tmp, 'Page.tsx'), tsx);
+
+    execSync(
+      `node source/skills/impeccable/scripts/live-wrap.mjs --id repeat1 --count 3 --classes "card" --tag "aside" --text "Beta card Second in the list." --file "${join(tmp, 'Page.tsx')}"`,
+      { cwd: process.cwd(), encoding: 'utf-8' }
+    );
+
+    const modified = readFileSync(join(tmp, 'Page.tsx'), 'utf-8');
+    const originalMatch = modified.match(/data-impeccable-variant="original"[\s\S]*?<\/div>/);
+    assert.ok(originalMatch, 'original wrapper present');
+    const inside = originalMatch[0];
+    assert.ok(inside.includes('Beta card'), 'wrapped the Beta card (the picked one)');
+    assert.ok(!inside.includes('Alpha card'), 'did not wrap Alpha');
+    assert.ok(!inside.includes('Gamma card'), 'did not wrap Gamma');
+  });
+
+  it('falls back to first-match when --text is not literally present in source (e.g. {title})', () => {
+    // textContent the browser sends is the rendered text, but the source uses
+    // a JSX expression. No candidate's source body contains the literal
+    // textContent — wrap should keep the first-match behavior rather than
+    // refusing, because failing here would be more annoying than wrong.
+    const tsx = `export default function Cards({ items }) {
+  return (
+    <main>
+      {items.map(item => (
+        <aside key={item.id} className="card">
+          <h2>{item.title}</h2>
+        </aside>
+      ))}
+    </main>
+  );
+}`;
+    writeFileSync(join(tmp, 'Cards.tsx'), tsx);
+
+    // Run with --text that won't show up in source verbatim.
+    execSync(
+      `node source/skills/impeccable/scripts/live-wrap.mjs --id dyn1 --count 3 --classes "card" --tag "aside" --text "Beta card body text" --file "${join(tmp, 'Cards.tsx')}"`,
+      { cwd: process.cwd(), encoding: 'utf-8' }
+    );
+
+    const modified = readFileSync(join(tmp, 'Cards.tsx'), 'utf-8');
+    assert.ok(modified.includes('data-impeccable-variants="dyn1"'), 'wrapped (first-match fallback)');
+  });
+
+  it('errors with element_ambiguous when --text matches multiple identical branches', () => {
+    // Two <aside className="card"> with truly identical body text. --text
+    // can't pick a winner — wrap should refuse rather than silently land.
+    const tsx = `export default function Page() {
+  return (
+    <main>
+      <aside className="card">
+        <h2>Same headline</h2>
+        <p>Identical body copy.</p>
+      </aside>
+      <aside className="card">
+        <h2>Same headline</h2>
+        <p>Identical body copy.</p>
+      </aside>
+    </main>
+  );
+}`;
+    writeFileSync(join(tmp, 'Dup.tsx'), tsx);
+
+    let errPayload;
+    try {
+      execSync(
+        `node source/skills/impeccable/scripts/live-wrap.mjs --id dup1 --count 3 --classes "card" --tag "aside" --text "Same headline Identical body copy." --file "${join(tmp, 'Dup.tsx')}"`,
+        { cwd: process.cwd(), encoding: 'utf-8', stdio: 'pipe' }
+      );
+      assert.fail('Should have exited with error');
+    } catch (err) {
+      assert.ok(err.status !== 0, 'non-zero exit');
+      errPayload = JSON.parse(err.stderr.toString().trim());
+    }
+    assert.equal(errPayload.error, 'element_ambiguous');
+    assert.equal(errPayload.fallback, 'agent-driven');
+    assert.ok(Array.isArray(errPayload.candidates) && errPayload.candidates.length === 2,
+      'two candidate locations reported');
+  });
+
   it('respects --tag to reject matches inside the wrong element type', () => {
     // Two elements, both containing the class. The <div> comes first in source
     // order; a tag-agnostic search would wrap it. With --tag section, the

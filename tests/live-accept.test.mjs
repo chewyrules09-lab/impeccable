@@ -123,6 +123,89 @@ describe('live-accept — style-element edge cases', () => {
     assert.ok(after.includes('variant one'), 'variant 1 content kept');
   });
 
+  // Regression: the agent writes JSX <style>{`…`}</style> and live-accept's
+  // extractCss used to capture the `{` … `` ` ``}` template-literal punctuation
+  // as CSS content. handleAccept then re-wrapped with another `{` …
+  // `` ` ``}`, producing nested template literals (`<style>{`{`@scope…`}`}`)
+  // that oxc rejects with "Expected `}` but found `@`". extractCss must
+  // strip the JSX wrap regardless of where the agent placed it.
+  it('carbonize does not double-wrap when the variants block uses JSX template literals on their own lines', () => {
+    const tsx = `export default function App() {\n` +
+      `  return (\n` +
+      `    <main>\n` +
+      `      <>\n` +
+      `        {/* impeccable-variants-start TPL */}\n` +
+      `        <div data-impeccable-variants="TPL" data-impeccable-variant-count="2" style={{ display: 'contents' }}>\n` +
+      `          <div data-impeccable-variant="original"><p className="hook">orig</p></div>\n` +
+      `          <style data-impeccable-css="TPL">\n` +
+      "            {`\n" +
+      `              @scope ([data-impeccable-variant="1"]) { .hook { color: red; } }\n` +
+      `              @scope ([data-impeccable-variant="2"]) { .hook { color: green; } }\n` +
+      "            `}\n" +
+      `          </style>\n` +
+      `          <div data-impeccable-variant="1"><p className="hook">variant one</p></div>\n` +
+      `          <div data-impeccable-variant="2" style={{ display: 'none' }}><p className="hook">variant two</p></div>\n` +
+      `        </div>\n` +
+      `        {/* impeccable-variants-end TPL */}\n` +
+      `      </>\n` +
+      `    </main>\n` +
+      `  );\n` +
+      `}\n`;
+    writeFileSync(join(tmp, 'App.tsx'), tsx);
+
+    const result = runAccept(tmp, ['--id', 'TPL', '--variant', '1']);
+    assert.equal(result.handled, true, `accept should succeed: ${JSON.stringify(result)}`);
+
+    const after = readFileSync(join(tmp, 'App.tsx'), 'utf-8');
+    // Exactly one `{` opener after the carbonized <style ...> tag — not two.
+    const carbonStyleMatch = after.match(/<style data-impeccable-css="TPL">([\s\S]*?)<\/style>/);
+    assert.ok(carbonStyleMatch, 'carbonize <style> block present');
+    const inner = carbonStyleMatch[1];
+    // Inner must open with one `{` ... and end with one ` `` ... — no nesting.
+    const openCount = (inner.match(/\{`/g) || []).length;
+    const closeCount = (inner.match(/`\}/g) || []).length;
+    assert.equal(openCount, 1, `expected exactly one {\` opener, got ${openCount}`);
+    assert.equal(closeCount, 1, `expected exactly one \`} closer, got ${closeCount}`);
+    // CSS content survived intact.
+    assert.ok(inner.includes('@scope ([data-impeccable-variant="1"])'), 'variant-1 scope kept');
+  });
+
+  // Same shape, but the agent put `{`` and ``\`}` attached to first/last CSS
+  // lines instead of on dedicated lines. Tests the inline-strip branch.
+  it('carbonize does not double-wrap when JSX template-literal punctuation hugs the CSS lines', () => {
+    const tsx = `export default function App() {\n` +
+      `  return (\n` +
+      `    <main>\n` +
+      `      <>\n` +
+      `        {/* impeccable-variants-start INLINE */}\n` +
+      `        <div data-impeccable-variants="INLINE" data-impeccable-variant-count="2" style={{ display: 'contents' }}>\n` +
+      `          <div data-impeccable-variant="original"><p className="hook">orig</p></div>\n` +
+      `          <style data-impeccable-css="INLINE">\n` +
+      "            {`@scope ([data-impeccable-variant=\"1\"]) { .hook { color: red; } }\n" +
+      "             @scope ([data-impeccable-variant=\"2\"]) { .hook { color: green; } }`}\n" +
+      `          </style>\n` +
+      `          <div data-impeccable-variant="1"><p className="hook">variant one</p></div>\n` +
+      `          <div data-impeccable-variant="2" style={{ display: 'none' }}><p className="hook">variant two</p></div>\n` +
+      `        </div>\n` +
+      `        {/* impeccable-variants-end INLINE */}\n` +
+      `      </>\n` +
+      `    </main>\n` +
+      `  );\n` +
+      `}\n`;
+    writeFileSync(join(tmp, 'App.tsx'), tsx);
+
+    const result = runAccept(tmp, ['--id', 'INLINE', '--variant', '1']);
+    assert.equal(result.handled, true, `accept should succeed: ${JSON.stringify(result)}`);
+
+    const after = readFileSync(join(tmp, 'App.tsx'), 'utf-8');
+    const inner = after.match(/<style data-impeccable-css="INLINE">([\s\S]*?)<\/style>/)[1];
+    const openCount = (inner.match(/\{`/g) || []).length;
+    const closeCount = (inner.match(/`\}/g) || []).length;
+    assert.equal(openCount, 1, `expected one {\` opener, got ${openCount}`);
+    assert.equal(closeCount, 1, `expected one \`} closer, got ${closeCount}`);
+    assert.ok(inner.includes('@scope ([data-impeccable-variant="1"])'), 'variant-1 scope kept');
+  });
+
   // Discard must restore the original element after a self-closing <style />,
   // proving extractOriginal also survives the style pattern.
   it('discard restores the original element after a JSX self-closing <style />', () => {

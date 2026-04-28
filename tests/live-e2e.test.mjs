@@ -269,6 +269,19 @@ for (const { name, fixture } of fixtures) {
           'accepted h1 survives with hero-title class',
         );
 
+        // Optional fixture hook: assert that arbitrary strings survive the
+        // wrap → accept → carbonize cycle. Used by repeated-branch fixtures
+        // to prove wrap disambiguated correctly — sibling branches the test
+        // didn't pick should be untouched.
+        if (Array.isArray(fixture.runtime.assertSourceContains)) {
+          for (const needle of fixture.runtime.assertSourceContains) {
+            assert.ok(
+              final.includes(needle),
+              `source still contains ${JSON.stringify(needle)} after accept (sibling branch must not be rewritten)`,
+            );
+          }
+        }
+
         // 9. DOM-side: at least one matching element, none inside any wrapper.
         await page.waitForFunction(
           (sel) => {
