@@ -1,11 +1,17 @@
-"""Phase 1 stub.
-
-Will compute position size from `RiskLimits.risk_per_trade_pct` and the
-stop distance implied by a signal's entry/stop:
-
-    size = floor((equity * risk_per_trade_pct / 100) / abs(entry - stop))
-
-The risk engine's `max_position_size_pct` / `max_total_exposure_pct` checks in
-`risk/engine.py` remain the final, independent gate after this sizing step;
-this module only proposes a size, it does not bypass risk checks.
+"""Position sizing: risk a fixed % of equity per trade, sized by the stop
+distance implied by a signal's entry/stop. The risk engine's
+`max_position_size_pct` / `max_total_exposure_pct` checks in `risk/engine.py`
+remain the final, independent gate after this — sizing only proposes a size,
+it never bypasses risk checks.
 """
+from __future__ import annotations
+
+import math
+
+
+def position_size(equity: float, risk_per_trade_pct: float, entry: float, stop: float) -> int:
+    distance = abs(entry - stop)
+    if distance <= 0:
+        return 0
+    risk_amount = equity * risk_per_trade_pct / 100.0
+    return math.floor(risk_amount / distance)

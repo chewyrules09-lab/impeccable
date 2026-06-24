@@ -7,6 +7,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from risk.limits import RiskLimits
+from strategy.config import StrategyConfig
 
 TradingMode = Literal["backtest", "paper", "live"]
 _DEFAULT_MODE: TradingMode = "paper"
@@ -34,6 +35,15 @@ class Settings(BaseSettings):
     max_market_data_age_seconds: int = 60
     anomaly_fill_price_deviation_pct: float = 1.0
     risk_per_trade_pct: float = 1.0
+
+    # Strategy config (ICT/TJR detector thresholds; see strategy/config.py).
+    strategy_swing_lookback: int = 2
+    strategy_min_fvg_size: float = 0.0
+    strategy_equal_level_tolerance_pct: float = 0.05
+    strategy_liquidity_lookback_bars: int = 20
+    strategy_order_block_lookback_bars: int = 10
+    strategy_stop_buffer_pct: float = 0.05
+    strategy_target_r_multiple: float = 2.0
 
     # Kill zones (RTH only, ET).
     killzone_am_start: time = time(9, 30)
@@ -99,4 +109,15 @@ class Settings(BaseSettings):
             max_market_data_age_seconds=self.max_market_data_age_seconds,
             anomaly_fill_price_deviation_pct=self.anomaly_fill_price_deviation_pct,
             risk_per_trade_pct=self.risk_per_trade_pct,
+        )
+
+    def strategy_config(self) -> StrategyConfig:
+        return StrategyConfig(
+            swing_lookback=self.strategy_swing_lookback,
+            min_fvg_size=self.strategy_min_fvg_size,
+            equal_level_tolerance_pct=self.strategy_equal_level_tolerance_pct,
+            liquidity_lookback_bars=self.strategy_liquidity_lookback_bars,
+            order_block_lookback_bars=self.strategy_order_block_lookback_bars,
+            stop_buffer_pct=self.strategy_stop_buffer_pct,
+            target_r_multiple=self.strategy_target_r_multiple,
         )

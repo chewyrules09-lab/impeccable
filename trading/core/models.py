@@ -137,6 +137,28 @@ class OrderAck(BaseModel):
     fill: Fill | None = None
 
 
+class Bar(BaseModel):
+    """One OHLCV bar. `is_bullish`/`is_bearish` are the candle-color
+    convenience properties the strategy layer's detectors rely on.
+    """
+
+    ticker: str
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+
+    @property
+    def is_bullish(self) -> bool:
+        return self.close > self.open
+
+    @property
+    def is_bearish(self) -> bool:
+        return self.close < self.open
+
+
 class RiskDecision(BaseModel):
     allowed: bool
     rule: str | None = None
