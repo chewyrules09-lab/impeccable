@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prediction Market Copilot</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f7f4;
+  --ink: #16201c;
+  --muted: #66736c;
+  --line: #d8ded7;
+  --panel: #ffffff;
+  --accent: #0f766e;
+  --accent-2: #a85516;
+  --good: #15803d;
+  --bad: #b42318;
+  --shadow: 0 18px 50px rgba(24, 36, 31, 0.1);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); }
+button, input, select { font: inherit; border: 1px solid var(--line); border-radius: 8px; }
+button { background: var(--accent); color: white; cursor: pointer; font-weight: 700; padding: 0.75rem 1rem; }
+button:hover { filter: brightness(0.96); }
+input, select { background: white; color: var(--ink); min-height: 42px; padding: 0.65rem 0.75rem; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; padding: 2rem clamp(1rem, 4vw, 3rem) 1rem; }
+.eyebrow { color: var(--accent-2); font-size: 0.78rem; font-weight: 800; letter-spacing: 0; margin: 0 0 0.3rem; text-transform: uppercase; }
+h1, h2, p { margin-top: 0; }
+h1 { font-size: clamp(2rem, 5vw, 4rem); line-height: 1; margin-bottom: 0; }
+h2 { font-size: 1.05rem; margin-bottom: 0.2rem; }
+main { display: grid; gap: 1rem; padding: 0 clamp(1rem, 4vw, 3rem) 2rem; }
+.icon-button { align-items: center; aspect-ratio: 1; border-radius: 8px; display: inline-flex; font-size: 1.3rem; justify-content: center; min-width: 46px; padding: 0; }
+.status-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.status-grid article, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.status-grid article { display: grid; gap: 0.2rem; padding: 1rem; }
+.status-grid span, label, small, .panel-head p, .warning { color: var(--muted); }
+.status-grid strong { font-size: 1.75rem; }
+.workspace { display: grid; gap: 1rem; grid-template-columns: minmax(280px, 360px) 1fr; }
+.panel { min-width: 0; padding: 1rem; }
+.main-panel { min-height: 520px; }
+.panel-head { align-items: start; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: 1rem; }
+.panel-head p { margin-bottom: 0; }
+.pill { background: #edf7f4; border: 1px solid #c5e7df; border-radius: 999px; color: #075f58; flex: 0 0 auto; font-size: 0.78rem; font-weight: 800; padding: 0.25rem 0.6rem; }
+.stack { display: grid; gap: 0.75rem; }
+label { display: grid; font-size: 0.85rem; font-weight: 700; gap: 0.35rem; }
+.watchlist { display: grid; gap: 0.75rem; margin-top: 1rem; }
+.trader { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 0.75rem; padding: 0.85rem; background: #fbfcfa; }
+.trader-head { align-items: center; display: flex; gap: 0.6rem; justify-content: space-between; }
+.trader code { color: var(--ink); font-size: 0.8rem; overflow-wrap: anywhere; }
+.trader button { background: #eef2ef; color: var(--ink); min-width: 42px; padding: 0.45rem 0.55rem; }
+.tab-bar { display: flex; gap: 0.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.tab-bar button { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0.75rem; }
+.tab-bar button.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 700; }
+.tab-bar button:hover { color: var(--ink); filter: none; }
+.opportunity { background: white; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 0.75rem; padding: 0.85rem; margin-bottom: 0.75rem; grid-template-columns: 74px 1fr; }
+.opp-score { align-items: center; aspect-ratio: 1; background: #f1f5f2; border-radius: 8px; color: var(--accent); display: flex; font-weight: 900; justify-content: center; }
+.opp-head { align-items: center; display: flex; gap: 0.6rem; justify-content: space-between; }
+.opp-edge { color: var(--good); font-size: 1.15rem; }
+.opp-edge.negative { color: var(--bad); }
+.opp-side { color: var(--muted); font-size: 0.9rem; text-align: right; }
+.markets { align-items: stretch; display: flex; gap: 0.6rem; margin-top: 0.55rem; }
+.markets a { background: #f8faf8; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); flex: 1; min-width: 0; overflow-wrap: anywhere; padding: 0.7rem; }
+.warning { font-size: 0.86rem; margin: 0.6rem 0 0; }
+.metrics { display: grid; gap: 0.45rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.metrics span { color: var(--muted); display: grid; font-size: 0.74rem; gap: 0.1rem; }
+.metrics strong { color: var(--ink); font-size: 0.88rem; }
+.empty { border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); padding: 1rem; }
+.loading { align-items: center; color: var(--muted); display: flex; gap: 0.5rem; padding: 2rem 1rem; }
+.spinner { animation: spin 0.8s linear infinite; border: 2px solid var(--line); border-radius: 50%; border-top-color: var(--accent); height: 18px; width: 18px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-msg { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: var(--bad); font-size: 0.88rem; padding: 0.75rem; }
+.trade-row { align-items: center; border-bottom: 1px solid var(--line); display: grid; font-size: 0.88rem; gap: 0.5rem; grid-template-columns: 1fr auto auto; padding: 0.6rem 0; }
+.trade-row:last-child { border-bottom: none; }
+.side-buy { color: var(--good); font-weight: 700; }
+.side-sell { color: var(--bad); font-weight: 700; }
+
+.signal-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 0.75rem; padding: 1rem; }
+.signal-strong { border-left: 4px solid var(--accent); background: #f0faf8; }
+.signal-moderate { border-left: 4px solid var(--accent-2); background: #fffbf5; }
+.signal-strength { align-items: center; display: flex; gap: 0.5rem; }
+.signal-badge { border-radius: 4px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.03em; padding: 0.2rem 0.45rem; }
+.badge-strong { background: #dcfce7; color: var(--good); }
+.badge-moderate { background: #fef3c7; color: #92400e; }
+.signal-details { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.75rem 0; }
+.signal-detail { display: grid; font-size: 0.84rem; gap: 0.15rem; }
+.signal-detail span { color: var(--muted); font-size: 0.74rem; }
+.signal-traders { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.signal-traders code { background: #eef2ef; border-radius: 4px; font-size: 0.76rem; padding: 0.15rem 0.4rem; }
+
+.alert-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 0.75rem; overflow: hidden; }
+.alert-buy { border-left: 4px solid var(--good); }
+.alert-sell { border-left: 4px solid var(--bad); }
+.alert-header { align-items: center; display: flex; gap: 0.5rem; justify-content: space-between; padding: 0.75rem 0.85rem 0.5rem; }
+.alert-header strong { font-size: 0.95rem; }
+.alert-header small { color: var(--muted); flex-shrink: 0; font-size: 0.78rem; }
+.alert-side { border-radius: 4px; display: inline-block; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.03em; margin-right: 0.4rem; padding: 0.15rem 0.4rem; vertical-align: middle; }
+.alert-side.side-buy { background: #dcfce7; color: var(--good); }
+.alert-side.side-sell { background: #fef2f2; color: var(--bad); }
+.alert-details { display: flex; flex-wrap: wrap; font-size: 0.84rem; gap: 0.75rem; padding: 0 0.85rem 0.6rem; }
+.alert-details code { font-size: 0.8rem; }
+.alert-details span { color: var(--muted); }
+.alert-details strong { color: var(--ink); }
+.alert-actions { border-top: 1px solid var(--line); padding: 0.6rem 0.85rem; }
+.signal-card .alert-actions { border-top: none; padding: 0.6rem 0 0; }
+.alert-trade-btn { align-items: center; background: var(--accent); border-radius: 6px; color: white; display: flex; font-size: 0.85rem; font-weight: 700; justify-content: center; padding: 0.55rem 0.75rem; text-decoration: none; }
+.alert-trade-btn:hover { filter: brightness(0.92); text-decoration: none; }
+
+.suggested-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.suggested-trader { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 0.75rem; padding: 0.85rem; background: #fbfcfa; align-content: start; }
+.suggested-head { align-items: center; display: flex; gap: 0.6rem; justify-content: flex-start; }
+.avatar { align-items: center; background: #e5eee9; border-radius: 8px; color: var(--accent); display: flex; flex: 0 0 auto; font-weight: 900; height: 42px; justify-content: center; overflow: hidden; width: 42px; }
+.avatar img { height: 100%; object-fit: cover; width: 100%; }
+.suggested-trader h3 { font-size: 0.95rem; margin: 0; overflow-wrap: anywhere; }
+.suggested-actions { display: flex; gap: 0.5rem; }
+.suggested-actions button, .suggested-actions a { align-items: center; border-radius: 8px; display: inline-flex; flex: 1; justify-content: center; min-height: 38px; padding: 0.45rem 0.6rem; }
+.suggested-actions a { border: 1px solid var(--line); color: var(--ink); font-weight: 700; }
+
+.rules { display: grid; gap: 0.75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.cors-banner { background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; color: #92400e; font-size: 0.88rem; margin: 0 clamp(1rem, 4vw, 3rem); padding: 0.75rem 1rem; }
+.cors-banner a { color: #92400e; font-weight: 700; }
+
+@media (max-width: 920px) {
+  .status-grid, .workspace, .rules, .suggested-grid { grid-template-columns: 1fr 1fr; }
+  .main-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .status-grid, .workspace, .rules { grid-template-columns: 1fr; }
+  .topbar { align-items: flex-start; }
+  .panel-head, .trader-head, .suggested-head, .opp-head, .markets { align-items: stretch; flex-direction: column; }
+  .opportunity { grid-template-columns: 1fr; }
+  .suggested-grid, .metrics, .suggested-actions { grid-template-columns: 1fr; }
+  .suggested-actions { flex-direction: column; }
+  .opp-score { aspect-ratio: auto; min-height: 46px; }
+  .opp-side { text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Prediction Market Copilot</p>
+    <h1>Dashboard</h1>
+  </div>
+  <div style="display:flex;gap:0.5rem;align-items:center">
+    <button id="alert-toggle" onclick="toggleAlerts()" title="Enable trade alerts" style="background:#eef2ef;color:var(--ink);font-size:0.85rem;padding:0.5rem 0.75rem">Alerts: OFF</button>
+    <button class="icon-button" onclick="refreshAll()" title="Refresh all data">&#x21bb;</button>
+  </div>
+</header>
+
+<div class="cors-banner" id="cors-banner" style="display:none">
+  Some API calls may be blocked by your browser (CORS). If data doesn't load, install the
+  <a href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank" rel="noopener">Allow CORS</a>
+  Chrome extension and enable it, then refresh this page.
+</div>
+
+<main>
+  <section class="status-grid">
+    <article>
+      <span>Bankroll</span>
+      <strong id="stat-bankroll">$70</strong>
+      <small><a href="#" onclick="event.preventDefault();promptBankroll()">edit</a></small>
+    </article>
+    <article>
+      <span>Smart Signals</span>
+      <strong id="stat-signals" style="color:var(--accent)">-</strong>
+    </article>
+    <article>
+      <span>Arb Opportunities</span>
+      <strong id="stat-arb">-</strong>
+    </article>
+    <article>
+      <span>Watched Traders</span>
+      <strong id="stat-traders">0</strong>
+    </article>
+  </section>
+
+  <section class="workspace">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Trader Watchlist</h2>
+          <p>Track Polymarket wallets</p>
+        </div>
+        <span class="pill">Copy Trade</span>
+      </div>
+      <div class="stack">
+        <label>
+          Add wallet address
+          <div style="display:flex;gap:0.5rem">
+            <input type="text" id="wallet-input" placeholder="0x..." style="flex:1">
+            <button onclick="addTrader()">Watch</button>
+          </div>
+        </label>
+      </div>
+
+      <div style="margin-top:1.25rem">
+        <h2>Recommended Traders</h2>
+        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">Curated for small bankrolls ($70-500). High ROI, consistent winners.</p>
+        <div id="recommended-traders"></div>
+      </div>
+
+      <div class="watchlist" id="watchlist"></div>
+    </div>
+
+    <div class="panel main-panel">
+      <div class="tab-bar">
+        <button class="active" data-tab="signals" onclick="switchTab('signals')">Smart Signals</button>
+        <button data-tab="alerts" onclick="switchTab('alerts')">Live Alerts</button>
+        <button data-tab="arbitrage" onclick="switchTab('arbitrage')">Arbitrage</button>
+        <button data-tab="markets" onclick="switchTab('markets')">Markets</button>
+        <button data-tab="activity" onclick="switchTab('activity')">Activity</button>
+      </div>
+
+      <div id="tab-signals">
+        <div class="panel-head">
+          <div>
+            <h2>Smart Signals</h2>
+            <p>Markets where multiple watched traders are buying the same side</p>
+          </div>
+        </div>
+        <div id="signals-list">
+          <div class="empty">Watch at least 2 traders, then signals will appear here when they converge on the same market.</div>
+        </div>
+      </div>
+
+      <div id="tab-alerts" style="display:none">
+        <div class="panel-head">
+          <div><h2>Live Trade Alerts</h2><p>New trades from watched traders</p></div>
+          <button onclick="alertsFeed=[];renderAlerts()" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Clear</button>
+        </div>
+        <div id="alerts-feed">
+          <div class="empty">Turn on alerts (top right) and wait for watched traders to make trades.</div>
+        </div>
+      </div>
+
+      <div id="tab-arbitrage" style="display:none">
+        <div class="panel-head">
+          <div><h2>Cross-Platform Arbitrage</h2><p>Polymarket vs Kalshi price gaps</p></div>
+        </div>
+        <div id="arb-list"><div class="loading"><div class="spinner"></div> Scanning...</div></div>
+      </div>
+
+      <div id="tab-markets" style="display:none">
+        <div class="panel-head">
+          <div><h2>Live Markets</h2><p>Top markets by volume</p></div>
+          <div style="display:flex;gap:0.5rem">
+            <button class="active" data-platform="all" onclick="filterMarkets('all')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">All</button>
+            <button data-platform="poly" onclick="filterMarkets('poly')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Poly</button>
+            <button data-platform="kalshi" onclick="filterMarkets('kalshi')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Kalshi</button>
+          </div>
+        </div>
+        <div id="market-list"><div class="loading"><div class="spinner"></div> Loading...</div></div>
+      </div>
+
+      <div id="tab-activity" style="display:none">
+        <div class="panel-head">
+          <div><h2>Trader Activity</h2><p>Click a trader to view trades</p></div>
+        </div>
+        <div id="activity-content">
+          <div class="empty">Add a wallet to your watchlist, then click the magnifying glass.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const STORAGE_KEY = "pmc-watchlist";
+const BANKROLL_KEY = "pmc-bankroll";
+const SEEN_KEY = "pmc-seen-trades";
+
+let polyMarkets = [];
+let kalshiMarkets = [];
+let signalsData = [];
+let alertsFeed = [];
+let alertsEnabled = false;
+let alertInterval = null;
+let lastPollTime = new Date(Date.now() - 5 * 60_000).toISOString();
+let currentFilter = "all";
+let corsErrorSeen = false;
+
+function loadWatchlist() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+function saveWatchlist(l) { localStorage.setItem(STORAGE_KEY, JSON.stringify(l)); }
+function loadBankroll() { return Number(localStorage.getItem(BANKROLL_KEY)) || 70; }
+function saveBankroll(v) { localStorage.setItem(BANKROLL_KEY, String(v)); }
+function loadSeen() { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); } }
+function saveSeen(s) { localStorage.setItem(SEEN_KEY, JSON.stringify([...s].slice(-500))); }
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function shortAddr(a) { return (!a || a.length < 12) ? (a||"") : a.slice(0,6)+"..."+a.slice(-4); }
+function fmtPrice(p) { return (p == null || !isFinite(p)) ? "-" : (p*100).toFixed(1)+"¢"; }
+function fmtDollars(n) { if (n == null || !isFinite(n)) return "-"; if (n>=1e6) return "$"+(n/1e6).toFixed(1)+"M"; if (n>=1e3) return "$"+(n/1e3).toFixed(1)+"K"; return "$"+n.toFixed(0); }
+function fmtPct(n) { return (n == null || !isFinite(n)) ? "-" : (n*100).toFixed(2)+"%"; }
+function fmtTime(ts) { if (!ts) return ""; const d=new Date(ts); if (isNaN(d)) return ""; const ms=Date.now()-d; if (ms<6e4) return "just now"; if (ms<36e5) return Math.floor(ms/6e4)+"m ago"; if (ms<864e5) return Math.floor(ms/36e5)+"h ago"; return d.toLocaleDateString(); }
+function numFrom(v) { const n=Number(v); return isFinite(n)?n:null; }
+function parseJsonish(v) { if (Array.isArray(v)) return v; if (typeof v!=="string") return []; try { const p=JSON.parse(v); return Array.isArray(p)?p:[]; } catch { return []; } }
+
+function promptBankroll() {
+  const v = prompt("Enter your current bankroll in dollars:", loadBankroll());
+  if (v===null) return;
+  const n = parseFloat(v.replace(/[$,]/g,""));
+  if (!isFinite(n)||n<0) return;
+  saveBankroll(n);
+  updateStats();
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab-bar button").forEach(b => b.classList.toggle("active", b.dataset.tab===tab));
+  ["signals","alerts","arbitrage","markets","activity"].forEach(t => {
+    const el = document.getElementById("tab-"+t);
+    if (el) el.style.display = t===tab?"":"none";
+  });
+}
+
+async function apiFetch(url) {
+  try {
+    const r = await fetch(url, { headers: { accept: "application/json", "user-agent": "prediction-market-copilot/0.1" } });
+    if (!r.ok) throw new Error(r.status+" "+r.statusText);
+    return r.json();
+  } catch (e) {
+    if (e.message.includes("Failed to fetch") || e.message.includes("CORS") || e.message.includes("NetworkError")) {
+      if (!corsErrorSeen) { corsErrorSeen = true; document.getElementById("cors-banner").style.display = "block"; }
+    }
+    throw e;
+  }
+}
+
+function normalizePoly(m) {
+  const outcomes = parseJsonish(m.outcomes);
+  const prices = parseJsonish(m.outcomePrices).map(numFrom);
+  const yi = outcomes.findIndex(o => String(o).toLowerCase()==="yes");
+  const ni = outcomes.findIndex(o => String(o).toLowerCase()==="no");
+  const yp = yi>=0?prices[yi]:prices[0];
+  const np = ni>=0?prices[ni]:prices[1];
+  return {
+    id: String(m.id||m.conditionId||m.slug||m.question),
+    platform: "Polymarket",
+    question: m.question||m.title||m.slug||"Untitled",
+    slug: m.slug||"",
+    url: m.slug ? "https://polymarket.com/event/"+m.slug : "https://polymarket.com",
+    yesPrice: yp??(np==null?null:1-np),
+    noPrice: np??(yp==null?null:1-yp),
+    volume: numFrom(m.volumeNum??m.volume),
+    liquidity: numFrom(m.liquidityNum??m.liquidity),
+  };
+}
+
+function normalizeKalshi(m) {
+  const yb=numFrom(m.yes_bid_dollars??m.yes_bid), ya=numFrom(m.yes_ask_dollars??m.yes_ask);
+  const nb=numFrom(m.no_bid_dollars??m.no_bid), na=numFrom(m.no_ask_dollars??m.no_ask);
+  let yp = yb!=null&&ya!=null?(yb+ya)/2:ya??yb??null;
+  let np = nb!=null&&na!=null?(nb+na)/2:na??nb??null;
+  if (yp!=null&&yp>1) yp/=100;
+  if (np!=null&&np>1) np/=100;
+  return {
+    id: m.ticker,
+    platform: "Kalshi",
+    question: m.title||m.subtitle||m.ticker,
+    slug: m.ticker,
+    url: m.ticker?"https://kalshi.com/markets/"+m.ticker:"https://kalshi.com",
+    yesPrice: yp??(np==null?null:1-np),
+    noPrice: np??(yp==null?null:1-yp),
+    volume: numFrom(m.volume_dollars??m.volume),
+    liquidity: numFrom(m.liquidity_dollars??m.liquidity),
+  };
+}
+
+async function loadMarkets() {
+  try {
+    const data = await apiFetch("https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100&order=volume&ascending=false");
+    polyMarkets = (Array.isArray(data)?data:data.markets||[]).map(normalizePoly).filter(m=>m.question);
+  } catch(e) { console.error("Polymarket:", e); }
+
+  try {
+    const data = await apiFetch("https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=100");
+    kalshiMarkets = (data.markets||[]).map(normalizeKalshi).filter(m=>m.question);
+  } catch(e) { console.error("Kalshi:", e); }
+
+  renderMarkets();
+  loadArbitrage();
+  updateStats();
+}
+
+function tokenize(t) {
+  const stop = new Set(["will","the","and","for","with","from","this","that","market","before","after","between","during","which","what","when","where"]);
+  return String(t).toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(w=>w.length>2&&!stop.has(w));
+}
+function similarity(a,b) {
+  const l=new Set(tokenize(a)), r=new Set(tokenize(b));
+  if (!l.size||!r.size) return 0;
+  let s=0; for (const w of l) if (r.has(w)) s++;
+  return s/Math.sqrt(l.size*r.size);
+}
+
+function loadArbitrage() {
+  const usable = p => isFinite(p)&&p>0.01&&p<0.99;
+  const matches = [];
+  for (const poly of polyMarkets) {
+    let best = null;
+    for (const kal of kalshiMarkets) {
+      const sc = similarity(poly.question, kal.question);
+      if (sc>=0.28 && (!best||sc>best.score)) best = {kal, score:sc};
+    }
+    if (!best) continue;
+    const a = usable(poly.yesPrice)&&usable(best.kal.noPrice) ? 1-(poly.yesPrice+best.kal.noPrice) : null;
+    const b = usable(best.kal.yesPrice)&&usable(poly.noPrice) ? 1-(best.kal.yesPrice+poly.noPrice) : null;
+    const edge = Math.max(a??-Infinity, b??-Infinity);
+    matches.push({
+      poly, kalshi:best.kal, score:best.score,
+      edge: isFinite(edge)?edge:null,
+      side: isFinite(edge)?(edge===a?"Buy Polymarket YES + Kalshi NO":"Buy Kalshi YES + Polymarket NO"):"Review manually",
+      warning: !isFinite(edge)?"Price too wide or missing.":best.score<0.45?"Loose text match. Confirm settlement terms.":"Confirm liquidity, fees, and settlement terms."
+    });
+  }
+  matches.sort((a,b)=>(b.edge??-Infinity)-(a.edge??-Infinity)||b.score-a.score);
+  renderArbitrage(matches.slice(0,30));
+  document.getElementById("stat-arb").textContent = matches.filter(m=>m.edge&&m.edge>0).length || "0";
+}
+
+function renderArbitrage(opps) {
+  const c = document.getElementById("arb-list");
+  if (!opps.length) { c.innerHTML='<div class="empty">No arbitrage opportunities found. Refreshes every 30s.</div>'; return; }
+  c.innerHTML = opps.map(o => {
+    const ep = o.edge!=null?(o.edge*100).toFixed(1):null;
+    const neg = o.edge!=null&&o.edge<0;
+    return `<div class="opportunity"><div class="opp-score">${(o.score*100).toFixed(0)}%</div><div>
+      <div class="opp-head"><h2>${esc(o.poly.question)}</h2><div>${ep!=null?`<span class="opp-edge ${neg?"negative":""}">${neg?"":"+"}${ep}%</span>`:""}<div class="opp-side">${esc(o.side)}</div></div></div>
+      <div class="markets"><a href="${esc(o.poly.url)}" target="_blank"><strong>Polymarket</strong><br>YES ${fmtPrice(o.poly.yesPrice)} / NO ${fmtPrice(o.poly.noPrice)}</a>
+      <a href="${esc(o.kalshi.url)}" target="_blank"><strong>Kalshi</strong><br>YES ${fmtPrice(o.kalshi.yesPrice)} / NO ${fmtPrice(o.kalshi.noPrice)}</a></div>
+      <p class="warning">${esc(o.warning)}</p></div></div>`;
+  }).join("");
+}
+
+function renderMarkets() {
+  const c = document.getElementById("market-list");
+  let list = [];
+  if (currentFilter==="all"||currentFilter==="poly") list = list.concat(polyMarkets);
+  if (currentFilter==="all"||currentFilter==="kalshi") list = list.concat(kalshiMarkets);
+  list.sort((a,b)=>(b.volume||0)-(a.volume||0));
+  list = list.slice(0,50);
+  if (!list.length) { c.innerHTML='<div class="empty">No markets loaded.</div>'; return; }
+  c.innerHTML = list.map(m => `<div class="opportunity" style="grid-template-columns:1fr"><div>
+    <div class="opp-head"><h2><a href="${esc(m.url)}" target="_blank">${esc(m.question)}</a></h2><span class="pill">${esc(m.platform)}</span></div>
+    <div class="metrics" style="margin-top:0.5rem"><span>YES<strong>${fmtPrice(m.yesPrice)}</strong></span><span>NO<strong>${fmtPrice(m.noPrice)}</strong></span><span>Volume<strong>${fmtDollars(m.volume)}</strong></span></div>
+  </div></div>`).join("");
+}
+
+function filterMarkets(f) {
+  currentFilter = f;
+  document.querySelectorAll("[data-platform]").forEach(b => b.classList.toggle("active", b.dataset.platform===f));
+  renderMarkets();
+}
+
+// --- Trader watchlist ---
+function addTrader() {
+  const input = document.getElementById("wallet-input");
+  const addr = input.value.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) { input.style.borderColor="var(--bad)"; setTimeout(()=>input.style.borderColor="",1500); return; }
+  const list = loadWatchlist();
+  if (list.some(t=>t.toLowerCase()===addr.toLowerCase())) return;
+  list.push(addr);
+  saveWatchlist(list);
+  input.value = "";
+  renderWatchlist();
+  updateStats();
+  loadSmartSignals();
+}
+function addTraderAddr(addr) {
+  const list = loadWatchlist();
+  if (list.some(t=>t.toLowerCase()===addr.toLowerCase())) return;
+  list.push(addr);
+  saveWatchlist(list);
+  renderWatchlist();
+  renderRecommended();
+  updateStats();
+  loadSmartSignals();
+}
+function removeTrader(addr) {
+  saveWatchlist(loadWatchlist().filter(t=>t.toLowerCase()!==addr.toLowerCase()));
+  renderWatchlist();
+  renderRecommended();
+  updateStats();
+  loadSmartSignals();
+}
+function renderWatchlist() {
+  const list = loadWatchlist(), c = document.getElementById("watchlist");
+  if (!list.length) { c.innerHTML='<div class="empty">No traders watched yet.</div>'; return; }
+  c.innerHTML = list.map(a => `<div class="trader"><div class="trader-head"><code>${esc(a)}</code>
+    <div style="display:flex;gap:0.35rem"><button onclick="viewTrader('${esc(a)}')" title="View">&#x1f50d;</button><button onclick="removeTrader('${esc(a)}')" title="Remove">&times;</button></div></div></div>`).join("");
+}
+
+async function viewTrader(addr) {
+  switchTab("activity");
+  const c = document.getElementById("activity-content");
+  c.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  try {
+    const data = await apiFetch("https://data-api.polymarket.com/activity?user="+encodeURIComponent(addr)+"&limit=30");
+    const trades = Array.isArray(data)?data:data.activity||[];
+    if (!trades.length) { c.innerHTML=`<div class="empty">No recent trades for ${esc(shortAddr(addr))}.</div>`; return; }
+    c.innerHTML = `<p style="font-size:0.85rem;color:var(--muted)">Recent trades for <strong>${esc(shortAddr(addr))}</strong></p>`+
+      trades.map(t => {
+        const side=String(t.side||t.type||"").toLowerCase(), isBuy=side.includes("buy");
+        const slug=t.slug||t.market_slug||"", url=slug?"https://polymarket.com/event/"+slug:"";
+        return `<div class="trade-row"><span>${url?`<a href="${esc(url)}" target="_blank">`:""}${esc(t.title||t.question||t.market||"Unknown")}${url?"</a>":""}</span>
+        <span class="${isBuy?"side-buy":"side-sell"}">${isBuy?"BUY":"SELL"}</span><span>${fmtDollars(Number(t.amount||t.size||0))}</span></div>`;
+      }).join("");
+  } catch(e) { c.innerHTML=`<div class="error-msg">${esc(e.message)}</div>`; }
+}
+
+// --- Smart Signals ---
+async function loadSmartSignals() {
+  const list = loadWatchlist(), c = document.getElementById("signals-list");
+  if (list.length<2) { c.innerHTML='<div class="empty">Watch at least 2 traders to see convergence signals.</div>'; document.getElementById("stat-signals").textContent="-"; return; }
+  c.innerHTML='<div class="loading"><div class="spinner"></div> Scanning...</div>';
+  const traderTrades = [];
+  for (const addr of list.slice(0,10)) {
+    try {
+      const data = await apiFetch("https://data-api.polymarket.com/activity?user="+encodeURIComponent(addr)+"&limit=30");
+      const trades = Array.isArray(data)?data:data.activity||[];
+      for (const t of trades) traderTrades.push({address:addr, trade:t});
+    } catch { /* skip */ }
+  }
+  const marketMap = new Map();
+  for (const {address, trade} of traderTrades) {
+    const market = trade.title||trade.question||trade.market||""; if (!market) continue;
+    const side = String(trade.side||trade.type||"").toLowerCase();
+    const isBuy = side.includes("buy");
+    const outcome = trade.outcome||(isBuy?"YES":"NO");
+    const key = market.toLowerCase().trim()+"|"+outcome.toUpperCase();
+    if (!marketMap.has(key)) marketMap.set(key, {market, outcome:outcome.toUpperCase(), side:isBuy?"BUY":"SELL", traders:[], totalAmount:0, priceSum:0, priceCount:0, slug:trade.slug||trade.market_slug||"", latestTime:null});
+    const e = marketMap.get(key);
+    if (!e.traders.includes(address)) e.traders.push(address);
+    e.totalAmount += Number(trade.amount||trade.size||0);
+    const price = Number(trade.price||0);
+    if (price>0) { e.priceSum+=price; e.priceCount++; }
+    const tt = trade.timestamp||trade.createdAt||trade.created_at||trade.time;
+    if (tt && (!e.latestTime || new Date(tt)>new Date(e.latestTime))) e.latestTime=tt;
+  }
+  signalsData = [...marketMap.values()].filter(s=>s.traders.length>=2).map(s=>({
+    ...s, avgPrice:s.priceCount>0?s.priceSum/s.priceCount:null,
+    traderCount:s.traders.length,
+    url: s.slug?"https://polymarket.com/event/"+s.slug:"https://polymarket.com",
+    strength: s.traders.length>=3?"strong":"moderate",
+    recommendation: s.traders.length>=3?"Multiple sharp traders converging. High-conviction signal.":"Two traders on the same side. Worth investigating."
+  })).sort((a,b)=>b.traderCount-a.traderCount||b.totalAmount-a.totalAmount).slice(0,10);
+  renderSignals();
+  updateStats();
+}
+
+function renderSignals() {
+  const c = document.getElementById("signals-list"), bankroll = loadBankroll();
+  document.getElementById("stat-signals").textContent = signalsData.length||"0";
+  if (!signalsData.length) { c.innerHTML='<div class="empty">No convergence signals right now. Your watched traders are not clustering on the same markets yet.</div>'; return; }
+  c.innerHTML = signalsData.map(s => {
+    const size = s.strength==="strong"?Math.min(Math.max(Math.floor(bankroll*0.3),5),bankroll):Math.min(Math.max(Math.floor(bankroll*0.15),5),bankroll);
+    const payout = s.avgPrice&&s.avgPrice>0&&s.avgPrice<1?Math.floor(size/s.avgPrice):null;
+    const isStrong = s.strength==="strong";
+    return `<div class="signal-card ${isStrong?"signal-strong":"signal-moderate"}">
+      <div class="signal-strength"><span class="signal-badge ${isStrong?"badge-strong":"badge-moderate"}">${isStrong?"STRONG":"MODERATE"}</span><span style="font-size:0.82rem;color:var(--muted)">${s.traderCount} traders converging</span></div>
+      <h2 style="margin:0.5rem 0 0.25rem;font-size:1rem">${esc(s.market)}</h2>
+      <div class="signal-details">
+        <div class="signal-detail"><span>Side</span><strong class="${s.side==="BUY"?"side-buy":"side-sell"}">${s.side} ${esc(s.outcome)}</strong></div>
+        ${s.avgPrice?`<div class="signal-detail"><span>Avg Price</span><strong>${fmtPrice(s.avgPrice)}</strong></div>`:""}
+        <div class="signal-detail"><span>Total Traded</span><strong>${fmtDollars(s.totalAmount)}</strong></div>
+        <div class="signal-detail"><span>Suggested Size</span><strong style="color:var(--accent)">$${size}</strong></div>
+        ${payout?`<div class="signal-detail"><span>Potential Payout</span><strong style="color:var(--good)">$${payout}</strong></div>`:""}
+      </div>
+      <div class="signal-traders">${s.traders.map(t=>`<code>${shortAddr(t)}</code>`).join(" ")}</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0">${esc(s.recommendation)}</p>
+      <div class="alert-actions" style="border-top:none;padding:0.6rem 0 0"><a href="${esc(s.url)}" target="_blank" class="alert-trade-btn">Open on Polymarket</a></div>
+    </div>`;
+  }).join("");
+}
+
+// --- Alerts ---
+function playSound() {
+  try {
+    const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);o.frequency.value=880;o.type="sine";
+    g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+0.3);
+    o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);
+    setTimeout(()=>{const o2=ctx.createOscillator(),g2=ctx.createGain();o2.connect(g2);g2.connect(ctx.destination);o2.frequency.value=1100;o2.type="sine";g2.gain.setValueAtTime(0.3,ctx.currentTime);g2.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+0.4);o2.start(ctx.currentTime);o2.stop(ctx.currentTime+0.4)},150);
+  } catch{}
+}
+function notify(title,body,url) {
+  if (Notification.permission!=="granted") return;
+  const n=new Notification(title,{body,tag:"pmc-"+Date.now()});
+  if (url) n.onclick=()=>{window.focus();window.open(url,"_blank")};
+}
+function toggleAlerts() {
+  alertsEnabled=!alertsEnabled;
+  const btn=document.getElementById("alert-toggle");
+  if (alertsEnabled) {
+    btn.textContent="Alerts: ON"; btn.style.background="var(--accent)"; btn.style.color="white";
+    if (Notification.permission==="default") Notification.requestPermission();
+    lastPollTime=new Date(Date.now()-6e4).toISOString();
+    pollAlerts(); alertInterval=setInterval(pollAlerts,15000);
+  } else {
+    btn.textContent="Alerts: OFF"; btn.style.background="#eef2ef"; btn.style.color="var(--ink)";
+    if (alertInterval){clearInterval(alertInterval);alertInterval=null;}
+  }
+}
+async function pollAlerts() {
+  const list=loadWatchlist(); if (!list.length) return;
+  const seen=loadSeen(); let newCount=0;
+  for (const addr of list.slice(0,10)) {
+    try {
+      const data = await apiFetch("https://data-api.polymarket.com/activity?user="+encodeURIComponent(addr)+"&limit=10");
+      const trades = Array.isArray(data)?data:data.activity||[];
+      for (const t of trades) {
+        const tt=t.timestamp||t.createdAt||t.created_at||t.time;
+        if (!tt||new Date(tt)<=new Date(lastPollTime)) continue;
+        const tid=addr+"-"+(t.id||tt);
+        if (seen.has(tid)) continue;
+        seen.add(tid); newCount++;
+        const side=String(t.side||t.type||"").toLowerCase(), isBuy=side.includes("buy");
+        const market=t.title||t.question||t.market||"Unknown";
+        const slug=t.slug||t.market_slug||"";
+        alertsFeed.unshift({traderAddr:addr,side:isBuy?"BUY":"SELL",market,amount:Number(t.amount||t.size||0),price:Number(t.price||0),outcome:t.outcome||(isBuy?"YES":""),polyUrl:slug?"https://polymarket.com/event/"+slug:"https://polymarket.com",timestamp:tt,isBuy});
+        notify((isBuy?"BUY":"SELL")+" Alert: "+shortAddr(addr),market+" | "+fmtDollars(Number(t.amount||t.size||0)),slug?"https://polymarket.com/event/"+slug:"");
+      }
+    } catch{}
+  }
+  lastPollTime=new Date().toISOString();
+  if (newCount>0){playSound();saveSeen(seen);renderAlerts();}
+}
+function renderAlerts() {
+  const c=document.getElementById("alerts-feed");
+  if (!alertsFeed.length){c.innerHTML='<div class="empty">Waiting for new trades. Alerts poll every 15 seconds.</div>';return;}
+  c.innerHTML=alertsFeed.slice(0,50).map(a=>`<div class="alert-card ${a.isBuy?"alert-buy":"alert-sell"}">
+    <div class="alert-header"><div><span class="alert-side ${a.isBuy?"side-buy":"side-sell"}">${a.side}</span><strong>${esc(a.market)}</strong></div><small>${fmtTime(a.timestamp)}</small></div>
+    <div class="alert-details"><span>Trader: <code>${shortAddr(a.traderAddr)}</code></span>${a.outcome?`<span>Outcome: <strong>${esc(a.outcome)}</strong></span>`:""} ${a.price?`<span>Price: <strong>${fmtPrice(a.price)}</strong></span>`:""} ${a.amount?`<span>Size: <strong>${fmtDollars(a.amount)}</strong></span>`:""}</div>
+    <div class="alert-actions"><a href="${esc(a.polyUrl)}" target="_blank" class="alert-trade-btn">Open on Polymarket to copy this trade</a></div></div>`).join("");
+}
+
+// --- Recommended traders (hardcoded high-ROI addresses) ---
+const RECOMMENDED = [
+  { name: "Fredi9999", address: "0xd91cfaced447e89bef93025fc20e0b0d3690668b", reason: "Consistently high ROI. Sharp on political and crypto markets.", xUsername: "Fredi9999P" },
+  { name: "Theo", address: "0x1b7b44457be81beb59af918cdedb7e7a0bac553c", reason: "Top monthly profit with strong return-on-volume. Diversified bets.", xUsername: "thelogesux" },
+  { name: "SilverCap", address: "0x68e00079c79bee7c1e9c46c5d9d26a4f9ec485f1", reason: "High conviction, fewer trades. Good for small bankroll copy.", xUsername: null },
+  { name: "PredictorGG", address: "0x4cb4c9c0879ac5038965e881d9f25a4d89c7b5fa", reason: "Disciplined sizing and positive ROI across multiple categories.", xUsername: null },
+  { name: "JustKen", address: "0xac1076ce1c112afc97d83be6ca352c0f9e1890c0", reason: "Strong monthly performance. Named account with trade history.", xUsername: null },
+];
+
+function renderRecommended() {
+  const c = document.getElementById("recommended-traders");
+  const watchlist = loadWatchlist().map(a=>a.toLowerCase());
+  c.innerHTML = RECOMMENDED.map(t => {
+    const isWatched = watchlist.includes(t.address.toLowerCase());
+    return `<div class="suggested-trader" style="margin-bottom:0.75rem">
+      <div class="suggested-head"><div class="avatar" style="font-size:0.75rem">${t.name.slice(0,2).toUpperCase()}</div>
+      <div><h3>${esc(t.name)}</h3>${t.xUsername?`<small style="color:var(--muted)">@${esc(t.xUsername)}</small>`:""}</div></div>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0">${esc(t.reason)}</p>
+      <div class="suggested-actions">
+        <button onclick="addTraderAddr('${t.address}')" ${isWatched?'disabled style="opacity:0.5"':""}>${isWatched?"Watching":"Watch"}</button>
+        <a href="https://polymarket.com/profile/${t.address}" target="_blank">Profile</a>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateStats() {
+  document.getElementById("stat-bankroll").textContent = fmtDollars(loadBankroll());
+  document.getElementById("stat-signals").textContent = signalsData.length||"0";
+  document.getElementById("stat-traders").textContent = loadWatchlist().length||"0";
+}
+
+async function refreshAll() {
+  await loadMarkets();
+  await loadSmartSignals();
+}
+
+document.getElementById("wallet-input").addEventListener("keydown", e => { if (e.key==="Enter") addTrader(); });
+renderWatchlist();
+renderRecommended();
+updateStats();
+refreshAll();
+setInterval(refreshAll, 30000);
+</script>
+</body>
+</html>
