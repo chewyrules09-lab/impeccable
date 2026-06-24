@@ -25,12 +25,13 @@
   <!-- Status cards -->
   <section class="status-grid" id="status-grid">
     <article>
-      <span>Polymarket Markets</span>
-      <strong id="stat-poly">-</strong>
+      <span>Bankroll</span>
+      <strong id="stat-bankroll">$70</strong>
+      <small><a href="#" onclick="event.preventDefault();promptBankroll()">edit</a></small>
     </article>
     <article>
-      <span>Kalshi Markets</span>
-      <strong id="stat-kalshi">-</strong>
+      <span>Smart Signals</span>
+      <strong id="stat-signals" style="color:var(--accent)">-</strong>
     </article>
     <article>
       <span>Arb Opportunities</span>
@@ -78,13 +79,27 @@
     <!-- Right panel: tabbed content -->
     <div class="panel main-panel">
       <div class="tab-bar">
-        <button class="active" data-tab="alerts" onclick="switchTab('alerts')">Live Alerts</button>
+        <button class="active" data-tab="signals" onclick="switchTab('signals')">Smart Signals</button>
+        <button data-tab="alerts" onclick="switchTab('alerts')">Live Alerts</button>
         <button data-tab="arbitrage" onclick="switchTab('arbitrage')">Arbitrage Scanner</button>
         <button data-tab="markets" onclick="switchTab('markets')">Markets</button>
         <button data-tab="activity" onclick="switchTab('activity')">Trader Activity</button>
       </div>
 
-      <div id="tab-alerts">
+      <div id="tab-signals">
+        <div class="panel-head">
+          <div>
+            <h2>Smart Signals</h2>
+            <p>Markets where multiple watched traders are buying the same side. Strongest conviction signals for your $70 bankroll.</p>
+          </div>
+          <button onclick="loadSmartSignals()" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Refresh</button>
+        </div>
+        <div id="signals-list">
+          <div class="loading"><div class="spinner"></div> Scanning for convergence signals...</div>
+        </div>
+      </div>
+
+      <div id="tab-alerts" style="display:none">
         <div class="panel-head">
           <div>
             <h2>Live Trade Alerts</h2>

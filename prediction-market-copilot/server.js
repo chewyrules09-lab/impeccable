@@ -380,6 +380,90 @@ async function handleApi(req, res, url) {
       return json(res, 200, { alerts: results, since, polledAt: new Date().toISOString() });
     }
 
+    if (url.pathname === "/api/smart-signals") {
+      const addresses = parseJsonish(url.searchParams.get("addresses"));
+      if (addresses.length === 0) {
+        return json(res, 200, { signals: [], message: "Add traders to your watchlist first." });
+      }
+
+      const traderTrades = [];
+      for (const addr of addresses.slice(0, 10)) {
+        if (!/^0x[a-fA-F0-9]{40}$/.test(String(addr).trim())) continue;
+        try {
+          const data = await getTraderActivity(addr.trim());
+          for (const trade of (data.trades || []).slice(0, 30)) {
+            traderTrades.push({ address: addr.trim(), trade });
+          }
+        } catch {
+          // skip
+        }
+      }
+
+      const marketMap = new Map();
+      for (const { address, trade } of traderTrades) {
+        const market = trade.title || trade.question || trade.market || "";
+        if (!market) continue;
+        const side = String(trade.side || trade.type || "").toLowerCase();
+        const isBuy = side.includes("buy");
+        const outcome = trade.outcome || (isBuy ? "YES" : "NO");
+        const key = market.toLowerCase().trim() + "|" + outcome.toUpperCase();
+
+        if (!marketMap.has(key)) {
+          marketMap.set(key, {
+            market,
+            outcome: outcome.toUpperCase(),
+            side: isBuy ? "BUY" : "SELL",
+            traders: [],
+            totalAmount: 0,
+            avgPrice: 0,
+            priceSum: 0,
+            priceCount: 0,
+            slug: trade.slug || trade.market_slug || "",
+            latestTime: null
+          });
+        }
+
+        const entry = marketMap.get(key);
+        if (!entry.traders.includes(address)) {
+          entry.traders.push(address);
+        }
+        const amount = Number(trade.amount || trade.size || 0);
+        entry.totalAmount += amount;
+        const price = Number(trade.price || 0);
+        if (price > 0) {
+          entry.priceSum += price;
+          entry.priceCount++;
+        }
+        const tradeTime = trade.timestamp || trade.createdAt || trade.created_at || trade.time;
+        if (tradeTime && (!entry.latestTime || new Date(tradeTime) > new Date(entry.latestTime))) {
+          entry.latestTime = tradeTime;
+        }
+      }
+
+      const signals = [...marketMap.values()]
+        .filter((s) => s.traders.length >= 2)
+        .map((s) => ({
+          market: s.market,
+          outcome: s.outcome,
+          side: s.side,
+          traderCount: s.traders.length,
+          traders: s.traders,
+          totalAmount: s.totalAmount,
+          avgPrice: s.priceCount > 0 ? s.priceSum / s.priceCount : null,
+          slug: s.slug,
+          url: s.slug ? `https://polymarket.com/event/${s.slug}` : "https://polymarket.com",
+          latestTime: s.latestTime,
+          strength: s.traders.length >= 3 ? "strong" : "moderate",
+          recommendation: s.traders.length >= 3
+            ? "Multiple sharp traders are converging on this position. High-conviction signal."
+            : "Two traders on the same side. Worth investigating before committing."
+        }))
+        .sort((a, b) => b.traderCount - a.traderCount || b.totalAmount - a.totalAmount)
+        .slice(0, 10);
+
+      return json(res, 200, { signals, refreshedAt: new Date().toISOString() });
+    }
+
     if (url.pathname === "/api/suggested-traders") {
       return json(res, 200, {
         traders: await getSuggestedTraders(),

@@ -1,10 +1,12 @@
 const STORAGE_KEY = "pmc-watchlist";
 const RULES_KEY = "pmc-rules";
 const SEEN_KEY = "pmc-seen-trades";
+const BANKROLL_KEY = "pmc-bankroll";
 const ALERT_POLL_MS = 15_000;
 
 let marketsData = { polymarket: [], kalshi: [] };
 let arbData = [];
+let signalsData = [];
 let currentMarketFilter = "all";
 let selectedTrader = null;
 let alertsEnabled = false;
@@ -148,11 +150,46 @@ function sendDesktopNotification(title, body, url) {
   }
 }
 
+function loadBankroll() {
+  return Number(localStorage.getItem(BANKROLL_KEY)) || 70;
+}
+
+function saveBankroll(val) {
+  localStorage.setItem(BANKROLL_KEY, String(val));
+}
+
+function promptBankroll() {
+  const current = loadBankroll();
+  const input = prompt("Enter your current bankroll in dollars:", current);
+  if (input === null) return;
+  const val = parseFloat(input.replace(/[$,]/g, ""));
+  if (!Number.isFinite(val) || val < 0) return;
+  saveBankroll(val);
+  document.getElementById("stat-bankroll").textContent = formatDollars(val);
+}
+
+function suggestSize(bankroll, strength, avgPrice) {
+  if (strength === "strong") {
+    const pct = 0.30;
+    const raw = bankroll * pct;
+    return Math.min(Math.max(Math.floor(raw), 5), bankroll);
+  }
+  const pct = 0.15;
+  const raw = bankroll * pct;
+  return Math.min(Math.max(Math.floor(raw), 5), bankroll);
+}
+
+function potentialPayout(size, avgPrice) {
+  if (!avgPrice || avgPrice <= 0 || avgPrice >= 1) return null;
+  const contracts = size / avgPrice;
+  return contracts;
+}
+
 function switchTab(tab) {
   document.querySelectorAll(".tab-bar button").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tab);
   });
-  ["alerts", "arbitrage", "markets", "activity"].forEach((t) => {
+  ["signals", "alerts", "arbitrage", "markets", "activity"].forEach((t) => {
     const el = document.getElementById("tab-" + t);
     if (el) el.style.display = t === tab ? "" : "none";
   });
@@ -555,9 +592,96 @@ async function renderSuggestedTraders() {
   }
 }
 
+async function loadSmartSignals() {
+  const watchlist = loadWatchlist();
+  const container = document.getElementById("signals-list");
+
+  if (watchlist.length < 2) {
+    container.innerHTML = '<div class="empty">Watch at least 2 traders to see convergence signals. The more traders you follow, the stronger the signals.</div>';
+    document.getElementById("stat-signals").textContent = "-";
+    return;
+  }
+
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> Scanning for convergence signals...</div>';
+
+  try {
+    const params = new URLSearchParams({ addresses: JSON.stringify(watchlist) });
+    const res = await fetch("/api/smart-signals?" + params);
+    const data = await res.json();
+    signalsData = data.signals || [];
+    renderSmartSignals();
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg">Failed to load signals: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderSmartSignals() {
+  const container = document.getElementById("signals-list");
+  const bankroll = loadBankroll();
+
+  document.getElementById("stat-signals").textContent = signalsData.length || "0";
+
+  if (signalsData.length === 0) {
+    container.innerHTML = '<div class="empty">No convergence signals right now. This means your watched traders are not clustering on the same markets. Check back after they make new trades.</div>';
+    return;
+  }
+
+  container.innerHTML = signalsData
+    .map((s) => {
+      const size = suggestSize(bankroll, s.strength, s.avgPrice);
+      const payout = potentialPayout(size, s.avgPrice);
+      const isStrong = s.strength === "strong";
+
+      return `
+      <div class="signal-card ${isStrong ? "signal-strong" : "signal-moderate"}">
+        <div class="signal-strength">
+          <span class="signal-badge ${isStrong ? "badge-strong" : "badge-moderate"}">
+            ${isStrong ? "STRONG" : "MODERATE"}
+          </span>
+          <span style="font-size:0.82rem;color:var(--muted)">${s.traderCount} traders converging</span>
+        </div>
+        <h2 style="margin:0.5rem 0 0.25rem;font-size:1rem">${escapeHtml(s.market)}</h2>
+        <div class="signal-details">
+          <div class="signal-detail">
+            <span>Side</span>
+            <strong class="${s.side === "BUY" ? "side-buy" : "side-sell"}">${s.side} ${escapeHtml(s.outcome)}</strong>
+          </div>
+          ${s.avgPrice ? `
+          <div class="signal-detail">
+            <span>Avg Price</span>
+            <strong>${formatPrice(s.avgPrice)}</strong>
+          </div>` : ""}
+          <div class="signal-detail">
+            <span>Total Traded</span>
+            <strong>${formatDollars(s.totalAmount)}</strong>
+          </div>
+          <div class="signal-detail">
+            <span>Suggested Size</span>
+            <strong style="color:var(--accent)">$${size}</strong>
+          </div>
+          ${payout ? `
+          <div class="signal-detail">
+            <span>Potential Payout</span>
+            <strong style="color:var(--good)">$${Math.floor(payout)}</strong>
+          </div>` : ""}
+        </div>
+        <div class="signal-traders">
+          ${s.traders.map((t) => `<code>${shortAddr(t)}</code>`).join(" ")}
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0">${escapeHtml(s.recommendation)}</p>
+        <div class="alert-actions">
+          <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" class="alert-trade-btn">
+            Open on Polymarket
+          </a>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
 function updateStats() {
-  document.getElementById("stat-poly").textContent = marketsData.polymarket.length || "-";
-  document.getElementById("stat-kalshi").textContent = marketsData.kalshi.length || "-";
+  document.getElementById("stat-bankroll").textContent = formatDollars(loadBankroll());
+  document.getElementById("stat-signals").textContent = signalsData.length || "0";
   document.getElementById("stat-arb").textContent = arbData.length || "-";
   document.getElementById("stat-traders").textContent = loadWatchlist().length || "0";
 }
@@ -590,7 +714,7 @@ async function loadArbitrage() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadMarkets(), loadArbitrage(), renderSuggestedTraders()]);
+  await Promise.all([loadMarkets(), loadArbitrage(), renderSuggestedTraders(), loadSmartSignals()]);
 }
 
 document.querySelectorAll("#rule-max-size, #rule-categories, #rule-approval, #rule-stoploss").forEach((el) => {
