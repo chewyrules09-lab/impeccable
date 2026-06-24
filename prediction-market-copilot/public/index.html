@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prediction Market Copilot</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Prediction Market Copilot</p>
+    <h1>Dashboard</h1>
+  </div>
+  <button class="icon-button" onclick="refreshAll()" title="Refresh all data">&#x21bb;</button>
+</header>
+
+<main>
+  <!-- Status cards -->
+  <section class="status-grid" id="status-grid">
+    <article>
+      <span>Polymarket Markets</span>
+      <strong id="stat-poly">-</strong>
+    </article>
+    <article>
+      <span>Kalshi Markets</span>
+      <strong id="stat-kalshi">-</strong>
+    </article>
+    <article>
+      <span>Arb Opportunities</span>
+      <strong id="stat-arb">-</strong>
+    </article>
+    <article>
+      <span>Watched Traders</span>
+      <strong id="stat-traders">-</strong>
+    </article>
+  </section>
+
+  <!-- Main workspace -->
+  <section class="workspace">
+    <!-- Left sidebar: watchlist -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Trader Watchlist</h2>
+          <p>Track Polymarket wallets</p>
+        </div>
+        <span class="pill">Copy Trade</span>
+      </div>
+
+      <div class="stack">
+        <label>
+          Add wallet address
+          <div style="display:flex;gap:0.5rem">
+            <input type="text" id="wallet-input" placeholder="0x..." style="flex:1">
+            <button onclick="addTrader()">Watch</button>
+          </div>
+        </label>
+      </div>
+
+      <div id="suggested-section" style="margin-top:1.25rem">
+        <h2>Suggested Traders</h2>
+        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">Top monthly performers from the Polymarket leaderboard</p>
+        <div class="suggested-grid" id="suggested-traders">
+          <div class="loading"><div class="spinner"></div> Loading leaderboard...</div>
+        </div>
+      </div>
+
+      <div class="watchlist" id="watchlist"></div>
+    </div>
+
+    <!-- Right panel: tabbed content -->
+    <div class="panel main-panel">
+      <div class="tab-bar">
+        <button class="active" data-tab="arbitrage" onclick="switchTab('arbitrage')">Arbitrage Scanner</button>
+        <button data-tab="markets" onclick="switchTab('markets')">Markets</button>
+        <button data-tab="activity" onclick="switchTab('activity')">Trader Activity</button>
+      </div>
+
+      <div id="tab-arbitrage">
+        <div class="panel-head">
+          <div>
+            <h2>Cross-Platform Arbitrage</h2>
+            <p>Polymarket vs Kalshi price gaps on matched events</p>
+          </div>
+        </div>
+        <div class="opportunities" id="arb-list">
+          <div class="loading"><div class="spinner"></div> Scanning for arbitrage...</div>
+        </div>
+      </div>
+
+      <div id="tab-markets" style="display:none">
+        <div class="panel-head">
+          <div>
+            <h2>Live Markets</h2>
+            <p>Top markets by volume from both platforms</p>
+          </div>
+          <div style="display:flex;gap:0.5rem">
+            <button class="active" data-platform="all" onclick="filterMarkets('all')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">All</button>
+            <button data-platform="poly" onclick="filterMarkets('poly')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Polymarket</button>
+            <button data-platform="kalshi" onclick="filterMarkets('kalshi')" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Kalshi</button>
+          </div>
+        </div>
+        <div class="opportunities" id="market-list">
+          <div class="loading"><div class="spinner"></div> Loading markets...</div>
+        </div>
+      </div>
+
+      <div id="tab-activity" style="display:none">
+        <div class="panel-head">
+          <div>
+            <h2>Trader Activity</h2>
+            <p>Select a trader from your watchlist to view recent trades</p>
+          </div>
+        </div>
+        <div id="activity-content">
+          <div class="empty">Add a wallet to your watchlist, then click on it to see recent activity.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Copy trade rules -->
+  <section>
+    <h2 style="margin-bottom:0.75rem">Copy Trade Rules (simulation only)</h2>
+    <div class="rules">
+      <label>
+        Max trade size
+        <input type="text" id="rule-max-size" placeholder="$500" value="$500">
+      </label>
+      <label>
+        Categories
+        <select id="rule-categories">
+          <option value="all">All categories</option>
+          <option value="politics">Politics</option>
+          <option value="crypto">Crypto</option>
+          <option value="sports">Sports</option>
+          <option value="science">Science</option>
+        </select>
+      </label>
+      <label>
+        Require approval
+        <select id="rule-approval">
+          <option value="yes">Yes, notify me first</option>
+          <option value="no">No, auto-execute</option>
+        </select>
+      </label>
+      <label>
+        Stop-loss
+        <input type="text" id="rule-stoploss" placeholder="20%" value="20%">
+      </label>
+    </div>
+    <p style="color:var(--muted);font-size:0.82rem;margin-top:0.75rem">
+      These rules are saved locally and will apply when execution mode is enabled.
+      No real trades are placed in read-only mode.
+    </p>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
