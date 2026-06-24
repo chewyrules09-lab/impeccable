@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, time
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from risk.limits import RiskLimits
 from strategy.config import StrategyConfig
@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     killzone_am_end: time = time(11, 0)
     killzone_pm_start: time = time(13, 30)
     killzone_pm_end: time = time(15, 30)
-    universe: list[str] = ["SPY", "QQQ"]
+    # NoDecode: pydantic-settings otherwise tries to JSON-decode env values
+    # for list-typed fields before any validator runs, which fails on a
+    # plain comma-separated string like "SPY,QQQ".
+    universe: Annotated[list[str], NoDecode] = ["SPY", "QQQ"]
 
     # Phase 3 validation gate.
     validation_min_paper_sessions: int = 20
