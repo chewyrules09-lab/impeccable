@@ -12,7 +12,7 @@ A risk engine runs before every order in every mode. A kill switch and a daily M
 
 ## Status
 
-This repo currently implements **Phase 0 (scaffold)** only: config, core models, the risk engine, persistence, the broker interface, and a `DryRunBroker`. Phases 1-5 (strategy logic, backtest, paper validation, live execution, daily operation) are stubbed with phase-tagged docstrings and are not implemented yet. See the project plan for the full phase breakdown.
+This repo currently implements **Phase 0 (scaffold)**, **Phase 1 (ICT/TJR strategy engine)**, and **Phase 2 (event-driven backtest)**: config, core models, the risk engine, persistence, the broker interface, a `DryRunBroker`, the full market-structure/FVG/order-block/liquidity/kill-zone detectors feeding `strategy/signals.py`, and a backtest engine (`backtest/engine.py`) that replays historical bars through those signals with resting limit-order fills, risk-engine gating, and full audit persistence. Optional `backtest/plot.py` (`pip install .[viz]`) renders an equity curve and a price/trade chart from a `BacktestResult`. Phases 3-5 (paper-validation gate, live execution, daily operation) are stubbed with phase-tagged docstrings and are not implemented yet. See the project plan for the full phase breakdown.
 
 ## Mode control
 

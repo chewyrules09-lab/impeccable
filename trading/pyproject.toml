@@ -17,6 +17,9 @@ dev = [
 live = [
     "alpaca-py>=0.33",
 ]
+viz = [
+    "matplotlib>=3.11.0",
+]
 
 [build-system]
 requires = ["hatchling"]
