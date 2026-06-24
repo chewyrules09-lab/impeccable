@@ -356,6 +356,30 @@ async function handleApi(req, res, url) {
       return json(res, 200, await getTraderActivity(url.searchParams.get("address")));
     }
 
+    if (url.pathname === "/api/poll-trades") {
+      const addresses = parseJsonish(url.searchParams.get("addresses"));
+      const since = url.searchParams.get("since") || new Date(Date.now() - 60_000).toISOString();
+      const results = [];
+
+      for (const addr of addresses.slice(0, 10)) {
+        if (!/^0x[a-fA-F0-9]{40}$/.test(String(addr).trim())) continue;
+        try {
+          const data = await getTraderActivity(addr.trim());
+          const newTrades = (data.trades || []).filter((t) => {
+            const tradeTime = t.timestamp || t.createdAt || t.created_at || t.time;
+            return tradeTime && new Date(tradeTime) > new Date(since);
+          });
+          if (newTrades.length > 0) {
+            results.push({ address: addr.trim(), trades: newTrades });
+          }
+        } catch {
+          // skip failed lookups
+        }
+      }
+
+      return json(res, 200, { alerts: results, since, polledAt: new Date().toISOString() });
+    }
+
     if (url.pathname === "/api/suggested-traders") {
       return json(res, 200, {
         traders: await getSuggestedTraders(),

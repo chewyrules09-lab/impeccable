@@ -13,7 +13,12 @@
     <p class="eyebrow">Prediction Market Copilot</p>
     <h1>Dashboard</h1>
   </div>
-  <button class="icon-button" onclick="refreshAll()" title="Refresh all data">&#x21bb;</button>
+  <div style="display:flex;gap:0.5rem;align-items:center">
+    <button id="alert-toggle" onclick="toggleAlerts()" title="Enable trade alerts" style="background:#eef2ef;color:var(--ink);font-size:0.85rem;padding:0.5rem 0.75rem">
+      Alerts: OFF
+    </button>
+    <button class="icon-button" onclick="refreshAll()" title="Refresh all data">&#x21bb;</button>
+  </div>
 </header>
 
 <main>
@@ -73,12 +78,26 @@
     <!-- Right panel: tabbed content -->
     <div class="panel main-panel">
       <div class="tab-bar">
-        <button class="active" data-tab="arbitrage" onclick="switchTab('arbitrage')">Arbitrage Scanner</button>
+        <button class="active" data-tab="alerts" onclick="switchTab('alerts')">Live Alerts</button>
+        <button data-tab="arbitrage" onclick="switchTab('arbitrage')">Arbitrage Scanner</button>
         <button data-tab="markets" onclick="switchTab('markets')">Markets</button>
         <button data-tab="activity" onclick="switchTab('activity')">Trader Activity</button>
       </div>
 
-      <div id="tab-arbitrage">
+      <div id="tab-alerts">
+        <div class="panel-head">
+          <div>
+            <h2>Live Trade Alerts</h2>
+            <p>New trades from your watched traders appear here with direct links to place the same trade</p>
+          </div>
+          <button onclick="clearAlerts()" style="background:#eef2ef;color:var(--ink);padding:0.4rem 0.7rem;font-size:0.82rem">Clear</button>
+        </div>
+        <div id="alerts-feed">
+          <div class="empty">Waiting for new trades from watched traders. Make sure alerts are enabled (top right). Polling every 15 seconds.</div>
+        </div>
+      </div>
+
+      <div id="tab-arbitrage" style="display:none">
         <div class="panel-head">
           <div>
             <h2>Cross-Platform Arbitrage</h2>

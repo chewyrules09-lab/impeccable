@@ -1,10 +1,16 @@
 const STORAGE_KEY = "pmc-watchlist";
 const RULES_KEY = "pmc-rules";
+const SEEN_KEY = "pmc-seen-trades";
+const ALERT_POLL_MS = 15_000;
 
 let marketsData = { polymarket: [], kalshi: [] };
 let arbData = [];
 let currentMarketFilter = "all";
 let selectedTrader = null;
+let alertsEnabled = false;
+let alertInterval = null;
+let lastPollTime = new Date(Date.now() - 5 * 60_000).toISOString();
+let alertsFeed = [];
 
 function loadWatchlist() {
   try {
@@ -16,6 +22,19 @@ function loadWatchlist() {
 
 function saveWatchlist(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+function loadSeenTrades() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenTrades(seen) {
+  const arr = [...seen].slice(-500);
+  localStorage.setItem(SEEN_KEY, JSON.stringify(arr));
 }
 
 function loadRules() {
@@ -61,6 +80,18 @@ function formatPct(n) {
   return (n * 100).toFixed(2) + "%";
 }
 
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const diffMs = now - d;
+  if (diffMs < 60_000) return "just now";
+  if (diffMs < 3600_000) return Math.floor(diffMs / 60_000) + "m ago";
+  if (diffMs < 86400_000) return Math.floor(diffMs / 3600_000) + "h ago";
+  return d.toLocaleDateString();
+}
+
 function shortAddr(addr) {
   if (!addr || addr.length < 12) return addr || "";
   return addr.slice(0, 6) + "..." + addr.slice(-4);
@@ -72,13 +103,205 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function playAlertSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    setTimeout(() => {
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.frequency.value = 1100;
+      osc2.type = "sine";
+      gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc2.start(ctx.currentTime);
+      osc2.stop(ctx.currentTime + 0.4);
+    }, 150);
+  } catch {
+    // no audio support
+  }
+}
+
+function sendDesktopNotification(title, body, url) {
+  if (Notification.permission !== "granted") return;
+  const n = new Notification(title, {
+    body,
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>",
+    tag: "pmc-" + Date.now()
+  });
+  if (url) {
+    n.onclick = () => {
+      window.focus();
+      window.open(url, "_blank");
+    };
+  }
+}
+
 function switchTab(tab) {
   document.querySelectorAll(".tab-bar button").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tab);
   });
-  document.getElementById("tab-arbitrage").style.display = tab === "arbitrage" ? "" : "none";
-  document.getElementById("tab-markets").style.display = tab === "markets" ? "" : "none";
-  document.getElementById("tab-activity").style.display = tab === "activity" ? "" : "none";
+  ["alerts", "arbitrage", "markets", "activity"].forEach((t) => {
+    const el = document.getElementById("tab-" + t);
+    if (el) el.style.display = t === tab ? "" : "none";
+  });
+}
+
+function toggleAlerts() {
+  alertsEnabled = !alertsEnabled;
+  const btn = document.getElementById("alert-toggle");
+
+  if (alertsEnabled) {
+    btn.textContent = "Alerts: ON";
+    btn.style.background = "var(--accent)";
+    btn.style.color = "white";
+
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    lastPollTime = new Date(Date.now() - 60_000).toISOString();
+    pollForNewTrades();
+    alertInterval = setInterval(pollForNewTrades, ALERT_POLL_MS);
+  } else {
+    btn.textContent = "Alerts: OFF";
+    btn.style.background = "#eef2ef";
+    btn.style.color = "var(--ink)";
+
+    if (alertInterval) {
+      clearInterval(alertInterval);
+      alertInterval = null;
+    }
+  }
+}
+
+async function pollForNewTrades() {
+  const watchlist = loadWatchlist();
+  if (watchlist.length === 0) return;
+
+  try {
+    const params = new URLSearchParams({
+      addresses: JSON.stringify(watchlist),
+      since: lastPollTime
+    });
+    const res = await fetch("/api/poll-trades?" + params);
+    const data = await res.json();
+
+    lastPollTime = data.polledAt || new Date().toISOString();
+
+    if (!data.alerts || data.alerts.length === 0) return;
+
+    const seen = loadSeenTrades();
+    let newCount = 0;
+
+    for (const group of data.alerts) {
+      for (const trade of group.trades) {
+        const tradeId = group.address + "-" + (trade.id || trade.timestamp || trade.createdAt || JSON.stringify(trade).slice(0, 80));
+        if (seen.has(tradeId)) continue;
+        seen.add(tradeId);
+        newCount++;
+
+        const side = String(trade.side || trade.type || "").toLowerCase();
+        const isBuy = side.includes("buy");
+        const market = trade.title || trade.question || trade.market || "Unknown market";
+        const amount = Number(trade.amount || trade.size || 0);
+        const price = Number(trade.price || 0);
+        const outcome = trade.outcome || (isBuy ? "YES" : "");
+        const slug = trade.slug || trade.market_slug || "";
+        const polyUrl = slug ? "https://polymarket.com/event/" + slug : "https://polymarket.com";
+        const timestamp = trade.timestamp || trade.createdAt || trade.created_at || trade.time || new Date().toISOString();
+
+        const alert = {
+          traderAddr: group.address,
+          side: isBuy ? "BUY" : "SELL",
+          market,
+          amount,
+          price,
+          outcome,
+          polyUrl,
+          timestamp,
+          isBuy
+        };
+
+        alertsFeed.unshift(alert);
+
+        sendDesktopNotification(
+          (isBuy ? "BUY" : "SELL") + " Alert: " + shortAddr(group.address),
+          market + " | " + formatDollars(amount),
+          polyUrl
+        );
+      }
+    }
+
+    if (newCount > 0) {
+      playAlertSound();
+      saveSeenTrades(seen);
+      renderAlertsFeed();
+
+      const alertTab = document.querySelector('[data-tab="alerts"]');
+      if (alertTab && !alertTab.classList.contains("active")) {
+        alertTab.style.background = "var(--accent)";
+        alertTab.style.color = "white";
+        setTimeout(() => {
+          alertTab.style.background = "";
+          alertTab.style.color = "";
+        }, 3000);
+      }
+    }
+  } catch (err) {
+    console.error("Poll error:", err);
+  }
+}
+
+function renderAlertsFeed() {
+  const container = document.getElementById("alerts-feed");
+
+  if (alertsFeed.length === 0) {
+    container.innerHTML = '<div class="empty">Waiting for new trades from watched traders. Make sure alerts are enabled (top right). Polling every 15 seconds.</div>';
+    return;
+  }
+
+  container.innerHTML = alertsFeed
+    .slice(0, 50)
+    .map((a) => `
+      <div class="alert-card ${a.isBuy ? "alert-buy" : "alert-sell"}">
+        <div class="alert-header">
+          <div>
+            <span class="alert-side ${a.isBuy ? "side-buy" : "side-sell"}">${a.side}</span>
+            <strong>${escapeHtml(a.market)}</strong>
+          </div>
+          <small>${formatTime(a.timestamp)}</small>
+        </div>
+        <div class="alert-details">
+          <span>Trader: <code>${shortAddr(a.traderAddr)}</code></span>
+          ${a.outcome ? `<span>Outcome: <strong>${escapeHtml(a.outcome)}</strong></span>` : ""}
+          ${a.price ? `<span>Price: <strong>${formatPrice(a.price)}</strong></span>` : ""}
+          ${a.amount ? `<span>Size: <strong>${formatDollars(a.amount)}</strong></span>` : ""}
+        </div>
+        <div class="alert-actions">
+          <a href="${escapeHtml(a.polyUrl)}" target="_blank" rel="noopener" class="alert-trade-btn">
+            Open on Polymarket to copy this trade
+          </a>
+        </div>
+      </div>
+    `)
+    .join("");
+}
+
+function clearAlerts() {
+  alertsFeed = [];
+  renderAlertsFeed();
 }
 
 function addTrader() {
@@ -105,6 +328,7 @@ function addTraderFromSuggested(address) {
   list.push(address);
   saveWatchlist(list);
   renderWatchlist();
+  renderSuggestedTraders();
   updateStats();
 }
 
@@ -175,9 +399,15 @@ async function viewTrader(address) {
         .map((trade) => {
           const side = String(trade.side || trade.type || "").toLowerCase();
           const isBuy = side.includes("buy");
+          const slug = trade.slug || trade.market_slug || "";
+          const polyUrl = slug ? "https://polymarket.com/event/" + slug : "";
           return `
           <div class="trade-row">
-            <span>${escapeHtml(trade.title || trade.question || trade.market || "Unknown market")}</span>
+            <span>
+              ${polyUrl ? `<a href="${escapeHtml(polyUrl)}" target="_blank" rel="noopener">` : ""}
+              ${escapeHtml(trade.title || trade.question || trade.market || "Unknown market")}
+              ${polyUrl ? "</a>" : ""}
+            </span>
             <span class="${isBuy ? "side-buy" : "side-sell"}">${isBuy ? "BUY" : "SELL"}</span>
             <span>${formatDollars(Number(trade.amount || trade.size || 0))}</span>
           </div>`;
@@ -374,6 +604,7 @@ document.getElementById("wallet-input").addEventListener("keydown", (e) => {
 
 restoreRules();
 renderWatchlist();
+renderAlertsFeed();
 updateStats();
 refreshAll();
 
