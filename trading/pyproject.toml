@@ -1,0 +1,32 @@
+[project]
+name = "ict-tjr-trading"
+version = "0.1.0"
+description = "Deterministic ICT/TJR signal engine with a gated backtest -> paper -> live execution pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+# Pulled in only by the Phase 2/3/4 modules (backtest data, paper/live brokers).
+# Not required to run Phase 0.
+live = [
+    "alpaca-py>=0.33",
+]
+viz = [
+    "matplotlib>=3.11.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["config", "core", "risk", "persistence", "broker", "strategy", "backtest", "validation", "reporting"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

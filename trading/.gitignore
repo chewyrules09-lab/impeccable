@@ -1,0 +1,10 @@
+.env
+*.db
+*.db-journal
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+reports/*.md
+validation_report.json
+.uv-cache/
